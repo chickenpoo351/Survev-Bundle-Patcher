@@ -3,7 +3,7 @@ import fetch from 'node-fetch';
 import fs from 'fs';
 import path from 'path';
 
-// Function to scrape javascript files
+// Scrapes the website for JS files
 async function scrapeJSFiles(baseURL) {
     const browser = await puppeteer.launch();
     const page = await browser.newPage();
@@ -22,22 +22,22 @@ async function scrapeJSFiles(baseURL) {
     return jsFiles;
 }
 
-// Function to move old files to a backup folder upon updates
+// Moves outdated files to a backup folder
 async function moveFilesToBackup(folderPath, filesToMove) {
     const backupFolderPath = path.join(folderPath, '../Old-Runtime-Bundles');
 
-    // Create backup folder if it doesn't exist (which shouldnt ever happen but hey redundency is best ;D)
+    // Create backup folder if it doesn't exist
     if (!fs.existsSync(backupFolderPath)) {
         fs.mkdirSync(backupFolderPath);
     }
 
-    // Move only the files to be backed up
+    // Move each file to backup folder
     for (const file of filesToMove) {
         const currentFilePath = path.join(folderPath, file);
         const backupFilePath = path.join(backupFolderPath, file);
 
         try {
-            fs.renameSync(currentFilePath, backupFilePath); // Move the file to the backup folder
+            fs.renameSync(currentFilePath, backupFilePath); // Move file to backup folder
             console.log(`Moved file: ${file} to backup folder.`);
         } catch (err) {
             console.error(`Error moving file ${file}:`, err);
@@ -45,77 +45,108 @@ async function moveFilesToBackup(folderPath, filesToMove) {
     }
 }
 
-// Function to download js files
-async function downloadFile(url, filename, folderPath, currentRuntimeBundleNames) {
+// Downloads new JS files to the folder
+async function downloadFile(url, filename, folderPath) {
+    // Skip specific unwanted files
     if (url.includes('gpt.js') || url.includes('pubads_impl.js')) {
         console.log(`Skipping unwanted file: ${filename}`);
-        return;
+        return false;
     }
 
-    // Check if the file is already downloaded
-    if (currentRuntimeBundleNames.includes(filename)) {
-        console.log(`File: ${filename} is already downloaded :o`);
-        return;
-    }
+    const filePath = path.join(folderPath, filename);
 
-    // Download the new file
+    // Download the file and save it locally
     try {
         const response = await fetch(url);
         const buffer = await response.buffer();
-        fs.writeFileSync(path.join(folderPath, filename), buffer);
-        console.log(`${filename} has been downloaded!`);
+        fs.writeFileSync(filePath, buffer); // Save the downloaded file to disk
+        console.log(`${filename} has been downloaded to: ${filePath}`);
+        return true;
     } catch (error) {
         console.error(`Error downloading ${filename}:`, error);
+        return false;
     }
 }
 
 async function main() {
-    const url = 'https://survev.io'; // Base URL for the site
-    const folderPath = '../Current-Runtime-Bundle';  // Folder where the files are downloaded
+    const url = 'https://survev.io'; // Base URL of the website to scrape
+    const folderPath = '../Current-Runtime-Bundle';  // Folder where files are stored
 
-    // Create folder if it doesn't exist
+    // Create the folder if it doesn't exist
     if (!fs.existsSync(folderPath)) {
         fs.mkdirSync(folderPath);
     }
 
-    const initialFiles = new Set(fs.readdirSync(folderPath)); // Track current files in the folder
+    const initialFiles = new Set(fs.readdirSync(folderPath)); // Current files in the folder
 
-    // Scrape JS files
+    // Scrape the JS files from the website
     const jsFiles = await scrapeJSFiles(url);
     const filesToDownload = [];
 
-    // Loop through all the scraped files and check if they are already downloaded
+    // Add all the found JS files to the download list
     for (const jsFile of jsFiles) {
         const filename = path.basename(jsFile);
         console.log(`Found file: ${filename}`);
+        filesToDownload.push(jsFile);
+    }
 
-        // If the file is not downloaded yet add to download list
-        if (!initialFiles.has(filename)) {
-            filesToDownload.push(jsFile);
-        } else {
-            console.log(`File ${filename} already exists. Skipping download.`);
+    // Determine which current files are outdated or missing
+    const filesToMove = [];
+
+    // Check each current file and compare it with the new files
+    for (const currentFile of initialFiles) {
+        const matchedFile = filesToDownload.find((newFile) => path.basename(newFile) === currentFile);
+        
+        // If a file is not found in the new list, mark it for backup
+        if (!matchedFile) {
+            filesToMove.push(currentFile);
         }
     }
 
-    // Now download the new files
-    for (const file of filesToDownload) {
-        const filename = path.basename(file);
-        await downloadFile(file, filename, folderPath, Array.from(initialFiles));  // Passing the current state of the files
-    }
+    let filesMoved = false; // Flag to check if any files were moved
+    let filesDownloaded = false; // Flag to track if any files were actually downloaded
 
-    // after downloading the new files, compare the initial files to the new ones
-    const currentFiles = new Set(fs.readdirSync(folderPath));
+    // Now, handle moving and downloading files
+    if (filesToMove.length > 0 || filesToDownload.length > 0) {
 
-    // if there are new files move the old files
-    if (currentFiles.size > initialFiles.size) {
-        const filesToMove = [...currentFiles].filter(file => !initialFiles.has(file)); // Get the old files that should be backed up
+        // Move old files to backup
         if (filesToMove.length > 0) {
-            console.log('New files detected, moving old files to backup folder.');
-            await moveFilesToBackup(folderPath, [...initialFiles]); // Move old files
+            console.log('Moving old files to backup folder...');
+            await moveFilesToBackup(folderPath, filesToMove);
+            filesMoved = true;
+        }
+
+        // Download any new files that aren't already present
+        for (const file of filesToDownload) {
+            const filename = path.basename(file);
+            const currentFilePath = path.join(folderPath, filename);
+
+            // Skip if the file already exists and hasn't changed
+            if (fs.existsSync(currentFilePath)) {
+                console.log(`File ${filename} already exists, skipping download.`);
+            } else {
+                const wasDownloaded = await downloadFile(file, filename, folderPath);
+                if (wasDownloaded) {
+                    filesDownloaded = true;
+                }
+            }
         }
     } else {
-        console.log('No new files detected, skipping backup.');
+        // If no changes detected, say everything is up to date
+        console.log('No changes detected. All files are up to date.');
     }
+
+    // Print messages based on whether files were moved or downloaded
+    if (!filesMoved && !filesDownloaded) {
+        console.log('No files were moved or downloaded, all files are up to date.');
+    } else if (filesMoved && !filesDownloaded) {
+        console.log('Old files have been moved to the backup folder, no new downloads.');
+    } else if (filesDownloaded) {
+        console.log('New files have been downloaded.');
+    }
+
+    console.log('Finished processing changes.');
 }
 
+// Start the script
 main();
