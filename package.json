@@ -1,18 +1,24 @@
 {
   "name": "survev-bundle-patcher",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "An autonomous tool for downloading and then patching minified runtime bundles from survev.io in order to help in production of the \"chickenPoo-Amazing-Survev-Client\" extension",
+  "main": "Start.js",
   "scripts": {
+    "start": "node Start.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "author": "chickenPoo",
+  "license": "GPL-3.0-only",
   "packageManager": "pnpm@10.17.1",
   "dependencies": {
-    "node-fetch": "^3.3.2",
+    "acorn": "^8.15.0",
+    "node-fetch": "3.3.2",
     "puppeteer": "^24.34.0"
   },
-  "type":"module"
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/chickenpoo351/survev-bundle-patcher.git"
+  }
 }
