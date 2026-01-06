@@ -64,7 +64,7 @@ if (thoughtToBeImportFileAmount >= 2 || thoughtToBeExportFileAmount >= 2) {
 function badFileNotify() {
     console.log('eventually this will probably make a pull request notifying me the code failed but for now instead here is pointless log spam :D')
 }
-42
+
 // export file patch section start
 // I know its a lot of words but I guess this is the stuff that must be done when working with minified code... :[
 const possiblePatch1Keywords = ['__proto__', 'BaseTextureCache', 'BoundingBox', 'CanvasRenderTarget', 'DATA_URI', 'EventEmitter', 'ProgramCache', 'TextureCache', 'clearTextureCache', 'correctBlendMode', 'createIndicesForQuads', 'decomposeDataURI', 'deprecation', 'destroyTextureCache', 'detectVideoAlphaMode', 'determineCrossOrigin', 'earcut', 'getBufferType', 'getCanvasBoundingBox', 'getResolutionOfUrl', 'hex2rgb', 'hex2string', 'interleaveTypedArrays', 'isMobile', 'isPow2', 'isWebGLSupported', 'log2', 'nextPow2', 'path', 'premultiplyBlendMode', 'premultiplyRgba', 'premultiplyTint', 'premultiplyTintToRgba', 'removeItems', 'rgb2hex', 'sayHello', 'sign', 'skipHello', 'string2Hex', 'trimCanvas', 'uid', 'url'];
@@ -84,45 +84,51 @@ function calculatePatch1Score(properties) {
 function findFirstExportFileVariableDeclarationPatchTarget(ast) {
     let highestScore = 0;
     let bestMatch = null;
-    let minifiedVariableName = null;
+    let minifiedVariableNames = null;
 
     // should hopefully find all of the VariableDeclaration's in the body object of the AST
-    ast.body.forEach(node => {
+    for (const node of ast.body) {
         if (node.type === 'VariableDeclaration' && node.kind === 'const') {
             node.declarations.forEach(declaration => {
                 if (declaration.id && declaration.id.type === 'Identifier') {
-                    minifiedVariableName = declaration.id.name;
-                }
-                if (declaration.init && declaration.init.type === 'CallExpression') {
-                    const firstArgument = declaration.init.arguments[0];
-                    if (firstArgument && firstArgument.type === 'CallExpression') {
-                        const nestedArgument = firstArgument.arguments[0];
-                        // then once the VariableDeclaration is found check if it contains a ObjectExpression node thingy
-                        if (nestedArgument && nestedArgument.type === 'ObjectExpression') {
-                            const properties = nestedArgument.properties || [];
-                            const keywordMatchScore = calculatePatch1Score(properties);
-                            // after verifying the node has the rough structure we check if any of the keywords match then
-                            //  whichever matches the most gets assigned to the bestMatch variable which should hopefully end up being the node we want
-                            if (keywordMatchScore > highestScore) {
-                                highestScore = keywordMatchScore;
-                                bestMatch = node;
-                            }
-                            if (highestScore / possiblePatch1Keywords.length >= 0.75) {
-                                // should hopefully make it so that if at least 75% of the words match then we can just 
-                                // assume we have the right node and continue with it to hopefully make the search faster 
-                                return bestMatch;
+                    const currentVariableName = declaration.id.name;
+
+                    if (declaration.init && declaration.init.type === 'CallExpression') {
+                        const firstArgument = declaration.init.arguments[0];
+                        if (firstArgument && firstArgument.type === 'CallExpression') {
+                            const nestedArgument = firstArgument.arguments[0];
+                            // then once the VariableDeclaration is found check if it contains a ObjectExpression node thingy
+                            if (nestedArgument && nestedArgument.type === 'ObjectExpression') {
+                                const properties = nestedArgument.properties || [];
+                                const keywordMatchScore = calculatePatch1Score(properties);
+                                // after verifying the node has the rough structure we check if any of the keywords match then
+                                //  whichever matches the most gets assigned to the bestMatch variable which should hopefully end up being the node we want
+                                if (keywordMatchScore > highestScore) {
+                                    highestScore = keywordMatchScore;
+                                    bestMatch = node;
+                                    minifiedVariableNames = currentVariableName;
+                                }
+                                if (highestScore / possiblePatch1Keywords.length >= 0.75) {
+                                    // should hopefully make it so that if at least 75% of the words match then we can just 
+                                    // assume we have the right node and continue with it to hopefully make the search faster 
+                                    return bestMatch;
+                                }
                             }
                         }
                     }
                 }
             })
         }
-    })
+    }
 
 
+    // After all nodes are processed, log the variable names collected
+    console.log('Collected variable names:', minifiedVariableNames);
+
+    // Log the best match details
     if (bestMatch) {
         console.log('Best match found:', bestMatch);
-        console.log('Variable name of the best match:', minifiedVariableName);
+        console.log('Variable names of the best match:', minifiedVariableNames);
     } else {
         console.log('No match found.');
     }
