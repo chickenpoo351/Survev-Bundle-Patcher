@@ -173,7 +173,7 @@ applyFirstExportFilePatch(exportFileAST, `/** customskin patch #1 of 3 start */ 
 // yup more words :o
 const possiblePatch2Keywords = ['constructor', 'realWidth', 'realHeight', 'mipmap', 'mipmap', 'scaleMode', 'scaleMode', 'wrapMode', 'wrapMode', 'setStyle', 'setSize', 'setRealSize', '_refreshPOT', 'setResolution', 'setResource', 'update', 'onError', 'destroy', 'dispose', 'castToBaseTexture', 'from', 'fromBuffer', 'addToCache', 'removeFromCache'];
 
-function calculatePatch2Score(methods) {
+function calculatePatch2Score(methods, extraPatch2Points) {
     let exportPatch2Score = 0;
 
     methods.forEach(property => {
@@ -181,6 +181,8 @@ function calculatePatch2Score(methods) {
             exportPatch2Score++;
         }
     });
+
+    exportPatch2Score += extraPatch2Points;
 
     return exportPatch2Score;
 }
@@ -198,12 +200,15 @@ function findSecondExportFileVariableDeclarationPatchTarget(ast) {
                 if (declaration.id && declaration.id.type === 'Identifier') {
                     const currentVariableNameForPatch2 = declaration.id.name;
                     if (declaration.init && declaration.init.type === 'ClassExpression') {
+                        // reset extra points per declaration (previous code accumulated across declarations)
+                        let extraPatch2Points = 0;
                         if (declaration.init.superClass && declaration.init.superClass.type === 'Identifier') {
-                            // something as I guess extra credit for the node will be added here if it matches
+                            extraPatch2Points += 2;
                         }
                         if (declaration.init.body && declaration.init.body.type === 'ClassBody') {
                             const classBodyForPatch2 = declaration.init.body;
-                            const methodScoreForPatch2 = calculatePatch2Score(classBodyForPatch2.body)
+                            // pass extraPatch2Points into the scorer so it doesn't get added as undefined
+                            const methodScoreForPatch2 = calculatePatch2Score(classBodyForPatch2.body, extraPatch2Points)
                             if (methodScoreForPatch2 > highestScoreForSecondPatch) {
                                 highestScoreForSecondPatch = methodScoreForPatch2;
                                 bestMatchForSecondPatch = node;
@@ -244,6 +249,86 @@ function applySecondExportFilePatch(ast, codeToAppend) {
 applySecondExportFilePatch(exportFileAST, `/** customskin patch #2 of 3 */ window.PIXIBaseTexture = ${minifiedVariableNameForPatch2} /** customskin patch #2 of 3 end */`);
 
 // export patch #2 stuff end
+// export patch #3 stuff start
+
+// what can I say words are the way I guess
+const possiblePatch3Keywords = ['constructor', 'update', 'onBaseTextureUpdated', 'destroy', 'clone', 'updateUvs', 'from', 'fromURL', 'fromBuffer', 'fromLoader', 'addToCache', 'removeFromCache', 'resolution', 'frame', 'frame', 'rotate', 'rotate', 'width', 'height', 'castToBaseTexture', 'EMPTY', 'WHITE'];
+
+function calculatePatch3Score(methods, extraPatch3Points) {
+    let exportPatch3Score = 0;
+
+    methods.forEach(property => {
+        if (property.key && property.key.type === 'Identifier' && possiblePatch3Keywords.includes(property.key.name)) {
+            exportPatch3Score++;
+        }
+    });
+
+    exportPatch3Score += extraPatch3Points;
+
+    return exportPatch3Score;
+}
+
+let minifiedVariableNameForPatch3 = null;
+
+function findThirdExportFileVariableDeclarationPatchTarget(ast) {
+    let highestScoreForThirdPatch = 0;
+    let bestMatchForThirdPatch = null;
+
+    for (const node of ast.body) {
+        if (node.type === 'ClassDeclaration') {
+            // get the class identifier name properly
+            let currentVariableNameForPatch3 = null;
+            if (node.id && node.id.type === 'Identifier') {
+                currentVariableNameForPatch3 = node.id.name;
+            }
+
+            let extraPatch3Points = 0;
+            if (node.superClass && node.superClass.type === 'Identifier') {
+                extraPatch3Points += 2;
+            }
+            if (node.body && node.body.type === 'ClassBody') {
+                const ClassBodyForPatch3 = node.body;
+                const methodScoreForPatch3 = calculatePatch3Score(ClassBodyForPatch3.body, extraPatch3Points);
+                if (methodScoreForPatch3 > highestScoreForThirdPatch) {
+                    highestScoreForThirdPatch = methodScoreForPatch3;
+                    bestMatchForThirdPatch = node;
+                    minifiedVariableNameForPatch3 = currentVariableNameForPatch3;
+                    console.log(`Potential match for patch #3: ${currentVariableNameForPatch3} (score: ${methodScoreForPatch3})`);
+                }
+                if (highestScoreForThirdPatch / possiblePatch3Keywords.length >= 0.75) {
+                    return { bestMatchForThirdPatch, minifiedVariableNameForPatch3 };
+                }
+            }
+        }
+    }
+
+    // After all nodes are processed, log the variable names collected
+    console.log('Collected variable names:', minifiedVariableNameForPatch3);
+
+    // Log the best match details
+    if (bestMatchForThirdPatch) {
+        console.log('Best match found:', bestMatchForThirdPatch);
+        console.log('Variable names of the best match:', minifiedVariableNameForPatch3);
+    } else {
+        console.log('No match found.');
+    }
+
+    return { bestMatchForThirdPatch, minifiedVariableNameForPatch3 };
+
+}
+
+function applyThirdExportFilePatch(ast, codeToAppend) {
+    const { bestMatchForThirdPatch, minifiedVariableNameForPatch3 } = findThirdExportFileVariableDeclarationPatchTarget(ast);
+    const ThirdPatchUpdatedAST = appendNewCodeAfter(ast, bestMatchForThirdPatch, codeToAppend);
+    console.log('Third patch successfully applied? Perhaps? Who knows...');
+    return ThirdPatchUpdatedAST;
+}
+
+applyThirdExportFilePatch(exportFileAST, `/** customskin patch #3 of 3 start */ window.PIXITexture = ${minifiedVariableNameForPatch3} /** customskin patch #3 of 3 end */`)
+// finally all patches for the export file done :D 
+// now just the import file and then turning both 
+// of the AST's back into a minified JavaScript file...
+// export patch #3 stuff end
 
 // export file patch section end
 
