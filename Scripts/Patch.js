@@ -81,10 +81,11 @@ function calculatePatch1Score(properties) {
     return exportPatch1Score;
 }
 
+let minifiedVariableNameForPatch1 = null;
+
 function findFirstExportFileVariableDeclarationPatchTarget(ast) {
-    let highestScore = 0;
-    let bestMatch = null;
-    let minifiedVariableNames = null;
+    let highestScoreForFirstPatch = 0;
+    let bestMatchForFirstPatch = null;
 
     // should hopefully find all of the VariableDeclaration's in the body object of the AST
     for (const node of ast.body) {
@@ -102,16 +103,16 @@ function findFirstExportFileVariableDeclarationPatchTarget(ast) {
                                 const properties = nestedArgument.properties || [];
                                 const keywordMatchScore = calculatePatch1Score(properties);
                                 // after verifying the node has the rough structure we check if any of the keywords match then
-                                //  whichever matches the most gets assigned to the bestMatch variable which should hopefully end up being the node we want
-                                if (keywordMatchScore > highestScore) {
-                                    highestScore = keywordMatchScore;
-                                    bestMatch = node;
-                                    minifiedVariableNames = currentVariableName;
+                                //  whichever matches the most gets assigned to the bestMatchForFirstPatch variable which should hopefully end up being the node we want
+                                if (keywordMatchScore > highestScoreForFirstPatch) {
+                                    highestScoreForFirstPatch = keywordMatchScore;
+                                    bestMatchForFirstPatch = node;
+                                    minifiedVariableNameForPatch1 = currentVariableName;
                                 }
-                                if (highestScore / possiblePatch1Keywords.length >= 0.75) {
+                                if (highestScoreForFirstPatch / possiblePatch1Keywords.length >= 0.75) {
                                     // should hopefully make it so that if at least 75% of the words match then we can just 
                                     // assume we have the right node and continue with it to hopefully make the search faster 
-                                    return bestMatch;
+                                    return { bestMatchForFirstPatch, minifiedVariableNameForPatch1 };
                                 }
                             }
                         }
@@ -123,17 +124,17 @@ function findFirstExportFileVariableDeclarationPatchTarget(ast) {
 
 
     // After all nodes are processed, log the variable names collected
-    console.log('Collected variable names:', minifiedVariableNames);
+    console.log('Collected variable names:', minifiedVariableNameForPatch1);
 
     // Log the best match details
-    if (bestMatch) {
-        console.log('Best match found:', bestMatch);
-        console.log('Variable names of the best match:', minifiedVariableNames);
+    if (bestMatchForFirstPatch) {
+        console.log('Best match found:', bestMatchForFirstPatch);
+        console.log('Variable names of the best match:', minifiedVariableNameForPatch1);
     } else {
         console.log('No match found.');
     }
 
-    return bestMatch;
+    return { bestMatchForFirstPatch, minifiedVariableNameForPatch1 };
 }
 
 function appendNewCodeAfter(ast, targetNode, codeToAppend) {
@@ -143,17 +144,29 @@ function appendNewCodeAfter(ast, targetNode, codeToAppend) {
     }
 
     const targetEnd = targetNode.end;
-    console.log('should be appending code at the end of the node')
+    console.log(`should be appending code at the node that ends here: ${targetEnd}`)
+    const newCodeNode = acorn.parse(codeToAppend, { ecmaVersion: 2022, allowReturnOutsideFunction: true, sourceType: 'module' });
+    const targetIndex = ast.body.findIndex(node => node === targetNode);
+
+    if (targetIndex !== -1) {
+        ast.body.splice(targetIndex + 1, 0, ...newCodeNode.body);
+        console.log('Code appended successfully I think :o');
+    } else {
+        console.log('Target node not found in the AST');
+    }
+
     return ast;
 }
 
 function applyFirstExportFilePatch(ast, codeToAppend) {
-    const bestMatchNode = findFirstExportFileVariableDeclarationPatchTarget(ast);
-    const firstPatchUpdatedAST = appendNewCodeAfter(ast, bestMatchNode, codeToAppend);
-    console.log('First patch succesfully applied? perhaps? who knows...')
+    const { bestMatchForFirstPatch, minifiedVariableNameForPatch1 } = findFirstExportFileVariableDeclarationPatchTarget(ast);
+    const firstPatchUpdatedAST = appendNewCodeAfter(ast, bestMatchForFirstPatch, codeToAppend);
+    console.log('First patch successfully applied? Perhaps? Who knows...');
     return firstPatchUpdatedAST;
 }
 
-applyFirstExportFilePatch(exportFileAST, 'will add stuff here later')
+applyFirstExportFilePatch(exportFileAST, `/** customskin patch #1 of 3 start */ window.PIXI = ${minifiedVariableNameForPatch1}; /** customskin patch #1 of 3 end */ `);
+
+
 // export file patch section end
 
