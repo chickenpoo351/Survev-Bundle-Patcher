@@ -66,6 +66,7 @@ function badFileNotify() {
 }
 
 // export file patch section start
+// export file patch #1 section start
 // I know its a lot of words but I guess this is the stuff that must be done when working with minified code... :[
 const possiblePatch1Keywords = ['__proto__', 'BaseTextureCache', 'BoundingBox', 'CanvasRenderTarget', 'DATA_URI', 'EventEmitter', 'ProgramCache', 'TextureCache', 'clearTextureCache', 'correctBlendMode', 'createIndicesForQuads', 'decomposeDataURI', 'deprecation', 'destroyTextureCache', 'detectVideoAlphaMode', 'determineCrossOrigin', 'earcut', 'getBufferType', 'getCanvasBoundingBox', 'getResolutionOfUrl', 'hex2rgb', 'hex2string', 'interleaveTypedArrays', 'isMobile', 'isPow2', 'isWebGLSupported', 'log2', 'nextPow2', 'path', 'premultiplyBlendMode', 'premultiplyRgba', 'premultiplyTint', 'premultiplyTintToRgba', 'removeItems', 'rgb2hex', 'sayHello', 'sign', 'skipHello', 'string2Hex', 'trimCanvas', 'uid', 'url'];
 
@@ -92,7 +93,7 @@ function findFirstExportFileVariableDeclarationPatchTarget(ast) {
         if (node.type === 'VariableDeclaration' && node.kind === 'const') {
             node.declarations.forEach(declaration => {
                 if (declaration.id && declaration.id.type === 'Identifier') {
-                    const currentVariableName = declaration.id.name;
+                    const currentVariableNameForPatch1 = declaration.id.name;
 
                     if (declaration.init && declaration.init.type === 'CallExpression') {
                         const firstArgument = declaration.init.arguments[0];
@@ -107,7 +108,7 @@ function findFirstExportFileVariableDeclarationPatchTarget(ast) {
                                 if (keywordMatchScore > highestScoreForFirstPatch) {
                                     highestScoreForFirstPatch = keywordMatchScore;
                                     bestMatchForFirstPatch = node;
-                                    minifiedVariableNameForPatch1 = currentVariableName;
+                                    minifiedVariableNameForPatch1 = currentVariableNameForPatch1;
                                 }
                                 if (highestScoreForFirstPatch / possiblePatch1Keywords.length >= 0.75) {
                                     // should hopefully make it so that if at least 75% of the words match then we can just 
@@ -167,6 +168,82 @@ function applyFirstExportFilePatch(ast, codeToAppend) {
 
 applyFirstExportFilePatch(exportFileAST, `/** customskin patch #1 of 3 start */ window.PIXI = ${minifiedVariableNameForPatch1}; /** customskin patch #1 of 3 end */ `);
 
+// export patch #1 stuff end
+// export patch #2 stuff start
+// yup more words :o
+const possiblePatch2Keywords = ['constructor', 'realWidth', 'realHeight', 'mipmap', 'mipmap', 'scaleMode', 'scaleMode', 'wrapMode', 'wrapMode', 'setStyle', 'setSize', 'setRealSize', '_refreshPOT', 'setResolution', 'setResource', 'update', 'onError', 'destroy', 'dispose', 'castToBaseTexture', 'from', 'fromBuffer', 'addToCache', 'removeFromCache'];
+
+function calculatePatch2Score(methods) {
+    let exportPatch2Score = 0;
+
+    methods.forEach(property => {
+        if (property.key && property.key.type === 'Identifier' && possiblePatch2Keywords.includes(property.key.name)) {
+            exportPatch2Score++;
+        }
+    });
+
+    return exportPatch2Score;
+}
+
+let minifiedVariableNameForPatch2 = null;
+
+function findSecondExportFileVariableDeclarationPatchTarget(ast) {
+    let highestScoreForSecondPatch = 0;
+    let bestMatchForSecondPatch = null;
+
+    for (const node of ast.body) {
+        if (node.type === 'VariableDeclaration' && node.kind === 'const') {
+            // then search all of the VariableDeclarator's
+            for (const declaration of node.declarations) {
+                if (declaration.id && declaration.id.type === 'Identifier') {
+                    const currentVariableNameForPatch2 = declaration.id.name;
+                    if (declaration.init && declaration.init.type === 'ClassExpression') {
+                        if (declaration.init.superClass && declaration.init.superClass.type === 'Identifier') {
+                            // something as I guess extra credit for the node will be added here if it matches
+                        }
+                        if (declaration.init.body && declaration.init.body.type === 'ClassBody') {
+                            const classBodyForPatch2 = declaration.init.body;
+                            const methodScoreForPatch2 = calculatePatch2Score(classBodyForPatch2.body)
+                            if (methodScoreForPatch2 > highestScoreForSecondPatch) {
+                                highestScoreForSecondPatch = methodScoreForPatch2;
+                                bestMatchForSecondPatch = node;
+                                minifiedVariableNameForPatch2 = currentVariableNameForPatch2;
+                                console.log(`Potential match for patch #2: ${currentVariableNameForPatch2} (score: ${methodScoreForPatch2})`);
+                            }
+                            if (highestScoreForSecondPatch / possiblePatch2Keywords.length >= 0.75) {
+                                return { bestMatchForSecondPatch, minifiedVariableNameForPatch2 };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // After all nodes are processed, log the variable names collected
+    console.log('Collected variable names:', minifiedVariableNameForPatch2);
+
+    // Log the best match details
+    if (bestMatchForSecondPatch) {
+        console.log('Best match found:', bestMatchForSecondPatch);
+        console.log('Variable names of the best match:', minifiedVariableNameForPatch2);
+    } else {
+        console.log('No match found.');
+    }
+
+    return { bestMatchForSecondPatch, minifiedVariableNameForPatch2 };
+}
+
+function applySecondExportFilePatch(ast, codeToAppend) {
+    const { bestMatchForSecondPatch, minifiedVariableNameForPatch2 } = findSecondExportFileVariableDeclarationPatchTarget(ast);
+    const SecondPatchUpdatedAST = appendNewCodeAfter(ast, bestMatchForSecondPatch, codeToAppend);
+    console.log('Second patch successfully applied? Perhaps? Who knows...');
+    return SecondPatchUpdatedAST;
+}
+
+applySecondExportFilePatch(exportFileAST, `/** customskin patch #2 of 3 */ window.PIXIBaseTexture = ${minifiedVariableNameForPatch2} /** customskin patch #2 of 3 end */`);
+
+// export patch #2 stuff end
 
 // export file patch section end
 
