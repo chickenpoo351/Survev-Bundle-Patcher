@@ -24,6 +24,7 @@ const isFile1ImportFile = fileHasBigImport(file1AST);
 const isFile2ImportFile = fileHasBigImport(file2AST);
 
 let importFileAST, exportFileAST;
+let importFilePath, exportFilePath;
 let thoughtToBeImportFileAmount = 0
 let thoughtToBeExportFileAmount = 0
 
@@ -39,20 +40,24 @@ if (isFile1ImportFile) {
     console.log('File 1 is more than likely the import file so file 2 is probably the export file')
     importFileCounter();
     importFileAST = file1AST;
+    importFilePath = file1Path;
 } else {
     console.log('File 1 does not seem to contain the big import block so file 2 is probably the import file')
     exportFileCounter();
     exportFileAST = file1AST;
+    exportFilePath = file1Path;
 }
 
 if (isFile2ImportFile) {
     console.log('File 2 is more than likely the import file so file 1 is probably the export file')
     importFileCounter();
     importFileAST = file2AST;
+    importFilePath = file2Path;
 } else {
     console.log('File 2 does not seem to contain the big import block so file 1 is probably the import file')
     exportFileCounter();
     exportFileAST = file2AST;
+    exportFilePath = file2Path
 }
 
 if (thoughtToBeImportFileAmount >= 2 || thoughtToBeExportFileAmount >= 2) {
@@ -64,6 +69,25 @@ if (thoughtToBeImportFileAmount >= 2 || thoughtToBeExportFileAmount >= 2) {
 function badFileNotify() {
     console.log('eventually this will probably make a pull request notifying me the code failed but for now instead here is pointless log spam :D')
 }
+
+const exportFileName = path.basename(exportFilePath, path.extname(exportFilePath));
+const importFileName = path.basename(importFilePath, path.extname(importFilePath));
+
+const modifyImportStatement = (ast, exportFileName) => {
+    ast.body.forEach(node => {
+        if (node.type === 'ImportDeclaration') {
+            // Update the value with the new file name
+            const newValue = `./${exportFileName}.patched.js`;
+            node.source.value = newValue;
+
+            // Update the raw to match the formatted string
+            node.source.raw = `"${newValue}"`;
+            console.log(`import file name statement changing to: ${newValue}`)
+        }
+    });
+};
+
+modifyImportStatement(importFileAST, exportFileName);
 
 // export file patch section start
 // export file patch #1 section start
@@ -270,7 +294,7 @@ function calculatePatch3Score(methods, extraPatch3Points) {
 
 let minifiedVariableNameForPatch3 = null;
 
-function findThirdExportFileVariableDeclarationPatchTarget(ast) {
+function findThirdExportFileClassDeclarationPatchTarget(ast) {
     let highestScoreForThirdPatch = 0;
     let bestMatchForThirdPatch = null;
 
@@ -318,7 +342,7 @@ function findThirdExportFileVariableDeclarationPatchTarget(ast) {
 }
 
 function applyThirdExportFilePatch(ast, codeToAppend) {
-    const { bestMatchForThirdPatch, minifiedVariableNameForPatch3 } = findThirdExportFileVariableDeclarationPatchTarget(ast);
+    const { bestMatchForThirdPatch, minifiedVariableNameForPatch3 } = findThirdExportFileClassDeclarationPatchTarget(ast);
     const ThirdPatchUpdatedAST = appendNewCodeAfter(ast, bestMatchForThirdPatch, codeToAppend);
     console.log('Third patch successfully applied? Perhaps? Who knows...');
     return ThirdPatchUpdatedAST;
@@ -331,4 +355,116 @@ applyThirdExportFilePatch(exportFileAST, `/** customskin patch #3 of 3 start */ 
 // export patch #3 stuff end
 
 // export file patch section end
+// import file patch section start
+// import file patch #1 stuff start
+// this got so messy I dont want to talk about it...
+
+
+// sometimes I wonder why I write this code... 
+// in the end its for some random browser game and 
+// I probably just gave more ideas to cheat creaters 
+// as to how to essentially automate bypassing the 
+// obfuscation of the source code... 
+// but oh well at least I can play with custom skins while 
+// doing minimal coding in the future I guess :I
+
+// (now that I think of it though... if a cheat creater really did try using this idea its semi useless 
+// unless your crazy enough to read obfuscated for a month looking for something simple...)
+const possibleImportPatch1Keywords = ['__id', '__type', 'active', 'bodySprite', 'chestSprite', 'flakSprite', 'steelskinSprite', 'helmetSprite', 'visorSprite', 'backpackSprite', 'handLSprite', 'handRSprite', 'footLSprite', 'footRSprite', 'hipSprite', 'gunLSprites', 'gunRSprites', 'objectLSprite', 'objectRSprite', 'meleeSprite', 'bodySubmergeSprite', 'handLSubmergeSprite', 'handRSubmergeSprite', 'footLSubmergeSprite', 'footRSubmergeSprite', 'bodyEffectSprite', 'patchSprite', 'handLContainer', 'handRContainer', 'footLContainer', 'footRContainer', 'bodyContainer', 'container', 'nameText', 'auraContainer', 'auraCircle', 'bones', 'anim', 'perks', 'perkTypes', 'perksDirty', 'surface', 'wasInWater', 'weapTypeOld', 'visualsDirty', 'stepDistance', 'zoomFast', 'playedDryFire', 'lastSwapIdx', 'hasteSeq', 'cycleSoundInstance', 'actionSoundInstance', 'useItemEmitter', 'hasteEmitter', 'passiveHealEmitter', 'downed', 'wasDowned', 'bleedTicker', 'submersion', 'gunRecoilL', 'gunRecoilR', 'fireDelay', 'throwableState', 'lastThrowablePickupSfxTicker', 'isNearDoorError', 'doorErrorTicker', 'noCielingRevealTicker', 'frozenTicker', 'updatedFrozenImage', 'viewAabb', 'auraViewFade', 'auraPulseTicker', 'auraPulseDir', 'renderLayer', 'renderZOrd', 'renderZIdx', 'throwableStatePrev', 'posInterpTicker', 'dirInterpolationTicker', 'layer', 'isLoadoutAvatar', 'playActionStartSfx', 'isNew', 'wasInsideObstacle', 'insideObstacleType', 'lastInsideObstacleTime', 'dead', 'gunSwitchCooldown', 'constructor', 'getMeleeCollider', 'canInteract', 'render', 'updateRenderLayer', 'updateVisuals', 'updateAura', 'updateRotation', 'playActionStartEffect', 'updateActionEffect', 'playItemPickupSound', 'selectIdlePose', 'selectAnim', 'currentAnim', 'playAnim', 'updateAnim', 'animPlaySound', 'animSetThrowableState', 'animThrowableParticles', 'animMeleeCollision', 'initSubmergeSprites', 'updateSubmersion', 'updateFrozenState', 'addRecoil', 'isUnderground', 'cancelBind', 'refresh'];
+
+function calculateImportPatch1Score(methods, extraImportPatch1Points) {
+    let importPatch1Score = 0;
+
+    methods.forEach(property => {
+        if (property.key && property.key.type === 'Identifier' && possibleImportPatch1Keywords.includes(property.key.name)) {
+            importPatch1Score++;
+        }
+    });
+
+    importPatch1Score += extraImportPatch1Points;
+
+    return importPatch1Score;
+}
+
+let minifiedVariableNameForImportPatch1 = null;
+
+function findFirstImportFileClassDeclarationPatchTarget(ast) {
+    let highestScoreForFirstImportPatch = 0;
+    let bestMatchForFirstImportPatch = null;
+    let bestMatchForFirstImportMethodDefinitionPatch = null;
+
+    for (const node of ast.body) {
+        if (node.type === 'ClassDeclaration') {
+            let currentVariableNameForImportPatch1 = null;
+            let extraImportPatch1Points = 0;
+            // If the class does not extend another class (superClass === null) award 2 points
+            if (node.superClass === null) {
+                extraImportPatch1Points += 2;
+            }
+            if (node.id && node.id.type === 'Identifier') {
+                currentVariableNameForImportPatch1 = node.id.name;
+            }
+            if (node.body && node.body.type === 'ClassBody') {
+                const classBodyForImportPatch1 = node.body;
+                let possibledirInterpolationTickerTarget = null;
+                // Look for the first MethodDefinition and if it's a constructor give extra points (before scoring)
+                for (const method of classBodyForImportPatch1.body) {
+                    if (method && method.type === 'MethodDefinition' && method.kind === 'constructor' && method.key && method.key.type === 'Identifier' && method.key.name === 'constructor') {
+                        possibledirInterpolationTickerTarget = method;
+                        break;
+                    }
+                }
+                const methodScoreForImportPatch1 = calculateImportPatch1Score(classBodyForImportPatch1.body, extraImportPatch1Points);
+                if (methodScoreForImportPatch1 > highestScoreForFirstImportPatch) {
+                    highestScoreForFirstImportPatch = methodScoreForImportPatch1;
+                    bestMatchForFirstImportPatch = node;
+                    bestMatchForFirstImportMethodDefinitionPatch = possibledirInterpolationTickerTarget;
+                    minifiedVariableNameForImportPatch1 = currentVariableNameForImportPatch1;
+                    console.log(`Potential match for import patch #1: ${currentVariableNameForImportPatch1} (score: ${methodScoreForImportPatch1})`);
+                }
+            }
+        }
+    }
+
+    // After all nodes are processed, log the variable names collected
+    console.log('Collected variable names:', minifiedVariableNameForImportPatch1);
+
+    // Log the best match details
+    if (bestMatchForFirstImportPatch) {
+        console.log('Best parent node match found:', bestMatchForFirstImportPatch);
+        console.log('Variable names of the best match:', minifiedVariableNameForImportPatch1);
+        console.log('Best MethodDefinition match found:', bestMatchForFirstImportMethodDefinitionPatch);
+    } else {
+        console.log('No match found.');
+    }
+
+    return { bestMatchForFirstImportPatch, minifiedVariableNameForImportPatch1, bestMatchForFirstImportMethodDefinitionPatch };
+
+}
+
+function appendNewCodeInsideFunction(methodDefinitionNode, codeToAppend) {
+    if (!methodDefinitionNode || methodDefinitionNode.type !== 'MethodDefinition' || !methodDefinitionNode.value || !methodDefinitionNode.value.body) {
+        console.log('Invalid MethodDefinition passed in');
+        return;
+    }
+
+    const functionBody = methodDefinitionNode.value.body.body;
+    const parsed = acorn.parse(codeToAppend, { ecmaVersion: 2022, sourceType: 'module' });
+
+    functionBody.push(...parsed.body);
+    console.log('Code appended inside method successfully');
+}
+
+function applyFirstImportFilePatch(ast, codeToAppend) {
+    const { bestMatchForFirstImportMethodDefinitionPatch } = findFirstImportFileClassDeclarationPatchTarget(ast);
+    const FirstImportPatchUpdatedAST = appendNewCodeInsideFunction(bestMatchForFirstImportMethodDefinitionPatch, codeToAppend)
+    console.log('First import patch successfully applied? Perhaps? Who knows...');
+    return FirstImportPatchUpdatedAST;
+}
+
+applyFirstImportFilePatch(importFileAST, ``)
+
+// import file patch #1 stuff end
+
+// import file patch section end
 
