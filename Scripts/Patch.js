@@ -388,10 +388,11 @@ function calculateImportPatch1Score(methods, extraImportPatch1Points) {
 
 let minifiedVariableNameForImportPatch1 = null;
 
-function findFirstImportFileClassDeclarationPatchTarget(ast) {
+function findFirstAndSecondImportFileClassDeclarationPatchTarget(ast) {
     let highestScoreForFirstImportPatch = 0;
     let bestMatchForFirstImportPatch = null;
     let bestMatchForFirstImportMethodDefinitionPatch = null;
+    let bestMatchForSecondImportMethodDefinitionPatch = null;
 
     for (const node of ast.body) {
         if (node.type === 'ClassDeclaration') {
@@ -407,10 +408,16 @@ function findFirstImportFileClassDeclarationPatchTarget(ast) {
             if (node.body && node.body.type === 'ClassBody') {
                 const classBodyForImportPatch1 = node.body;
                 let possibledirInterpolationTickerTarget = null;
-                // Look for the first MethodDefinition and if it's a constructor give extra points (before scoring)
+                let possibleUpdateVisualsTarget = null;
                 for (const method of classBodyForImportPatch1.body) {
                     if (method && method.type === 'MethodDefinition' && method.kind === 'constructor' && method.key && method.key.type === 'Identifier' && method.key.name === 'constructor') {
                         possibledirInterpolationTickerTarget = method;
+                        break;
+                    }
+                }
+                for (const method of classBodyForImportPatch1.body) {
+                    if (method && method.type === 'MethodDefinition' && method.kind === 'method' && method.key && method.key.type === 'Identifier' && method.key.name === 'updateVisuals') {
+                        possibleUpdateVisualsTarget = method;
                         break;
                     }
                 }
@@ -419,6 +426,7 @@ function findFirstImportFileClassDeclarationPatchTarget(ast) {
                     highestScoreForFirstImportPatch = methodScoreForImportPatch1;
                     bestMatchForFirstImportPatch = node;
                     bestMatchForFirstImportMethodDefinitionPatch = possibledirInterpolationTickerTarget;
+                    bestMatchForSecondImportMethodDefinitionPatch = possibleUpdateVisualsTarget;
                     minifiedVariableNameForImportPatch1 = currentVariableNameForImportPatch1;
                     console.log(`Potential match for import patch #1: ${currentVariableNameForImportPatch1} (score: ${methodScoreForImportPatch1})`);
                 }
@@ -433,19 +441,20 @@ function findFirstImportFileClassDeclarationPatchTarget(ast) {
     if (bestMatchForFirstImportPatch) {
         console.log('Best parent node match found:', bestMatchForFirstImportPatch);
         console.log('Variable names of the best match:', minifiedVariableNameForImportPatch1);
-        console.log('Best MethodDefinition match found:', bestMatchForFirstImportMethodDefinitionPatch);
+        console.log('Best first MethodDefinition match found:', bestMatchForFirstImportMethodDefinitionPatch);
+        console.log('Best second MethodDefinition match found:', bestMatchForSecondImportMethodDefinitionPatch);
     } else {
         console.log('No match found.');
     }
 
-    return { bestMatchForFirstImportPatch, minifiedVariableNameForImportPatch1, bestMatchForFirstImportMethodDefinitionPatch };
+    return { bestMatchForFirstImportPatch, minifiedVariableNameForImportPatch1, bestMatchForFirstImportMethodDefinitionPatch, bestMatchForSecondImportMethodDefinitionPatch };
 
 }
 
-function appendNewCodeInsideFunction(methodDefinitionNode, codeToAppend) {
+function appendNewCodeInsideFunction(methodDefinitionNode, ast, codeToAppend) {
     if (!methodDefinitionNode || methodDefinitionNode.type !== 'MethodDefinition' || !methodDefinitionNode.value || !methodDefinitionNode.value.body) {
         console.log('Invalid MethodDefinition passed in');
-        return;
+        return ast;
     }
 
     const functionBody = methodDefinitionNode.value.body.body;
@@ -453,18 +462,154 @@ function appendNewCodeInsideFunction(methodDefinitionNode, codeToAppend) {
 
     functionBody.push(...parsed.body);
     console.log('Code appended inside method successfully');
+    return ast;
 }
 
-function applyFirstImportFilePatch(ast, codeToAppend) {
-    const { bestMatchForFirstImportMethodDefinitionPatch } = findFirstImportFileClassDeclarationPatchTarget(ast);
-    const FirstImportPatchUpdatedAST = appendNewCodeInsideFunction(bestMatchForFirstImportMethodDefinitionPatch, codeToAppend)
-    console.log('First import patch successfully applied? Perhaps? Who knows...');
-    return FirstImportPatchUpdatedAST;
-}
+const importPatchTargets = findFirstAndSecondImportFileClassDeclarationPatchTarget(importFileAST);
 
-applyFirstImportFilePatch(importFileAST, ``)
+function applyFirstImportFilePatch(ast, targets, codeToAppend) {
+    const { bestMatchForFirstImportMethodDefinitionPatch } = targets;
+    if (bestMatchForFirstImportMethodDefinitionPatch) {
+        const FirstImportPatchUpdatedAST = appendNewCodeInsideFunction(bestMatchForFirstImportMethodDefinitionPatch, ast, codeToAppend)
+        console.log('First import patch successfully applied? Perhaps? Who knows...');
+        return FirstImportPatchUpdatedAST;
+    } else {
+        return ast;
+    }
+}
+// hopefully this ; will correctly apply it to the end of the =0 
+// which is at the end of a comma chain so if that isnt added well 
+// I have to do quite a bit more work :o
+applyFirstImportFilePatch(importFileAST, importPatchTargets, `;/** customskin code inject #1 of 3 */if(this.isLoadoutAvatar){/** Register loadout instance */try{if(!window.CustomSkinAPI_Loadout||!window.CustomSkinAPI_Loadout.container?.parent){window.CustomSkinAPI_Loadout=this;this.valid=true;console.log("[CustomSkinAPI] Registered loadout preview uo:",this.__id)}else console.log("[CustomSkinAPI] Another loadout instance already registered, skipping:",this.__id);/** If no active in-game instance exists, or it's invalid, prefer this loadout */const api=window.CustomSkinAPI;if(!api||!api.valid||!api.container?.parent||!api.active||api.isLoadoutAvatar){Object.defineProperty(window,"CustomSkinAPI",{value:this,writable:false,configurable:true});this.valid=true;console.log("[CustomSkinAPI] Using loadout mannequin as active API:",this.__id)}}catch(err){console.warn("[CustomSkinAPI] Could not register loadout avatar:",err)}}else{/** Safer engine player getter */const getEngineActivePlayer=()=>{try{const pa=window.CustomLocalPlayer,uo=pa?.activePlayer;if(uo&&uo.constructor?.name==="uo"){const valid=uo.active&&uo.container?.parent&&!uo.isLoadoutAvatar;if(valid)return uo}}catch{}return null};/** Mark old API invalid */if(window.CustomSkinAPI&&(!window.CustomSkinAPI.container?.parent||!window.CustomSkinAPI.active||window.CustomSkinAPI.isLoadoutAvatar)){console.log("[CustomSkinAPI] Old reference no longer valid — marking invalid");try{window.CustomSkinAPI.valid=false}catch{}}/** Register safely with smarter fallback */const tryRegister=src=>{try{const engineUo=getEngineActivePlayer();if(engineUo&&engineUo!==this){console.log("[CustomSkinAPI] Engine activePlayer verified; prioritizing engine version (source:",src,")");Object.defineProperty(window,"CustomSkinAPI",{value:engineUo,writable:false,configurable:true});engineUo.valid=true;return true}/** No valid engine player — fallback to this or the loadout one */if(!engineUo&&window.CustomSkinAPI_Loadout&&window.CustomSkinAPI_Loadout.container?.parent){console.log("[CustomSkinAPI] No engine player — reverting to loadout instance:",window.CustomSkinAPI_Loadout.__id);Object.defineProperty(window,"CustomSkinAPI",{value:window.CustomSkinAPI_Loadout,writable:false,configurable:true});window.CustomSkinAPI_Loadout.valid=true;return true}/** Otherwise, register normally */if(typeof this.__id!=="number"||this.__id<=0){console.log("[CustomSkinAPI] Invalid id; delaying registration (id:",this.__id,")");return false}Object.defineProperty(window,"CustomSkinAPI",{value:this,writable:false,configurable:true});this.valid=true;console.log("[CustomSkinAPI] Registered in-game local player uo:",this.__id,"(source:",src,")");/** Force initial visuals refresh so skin applies instantly */setTimeout(()=>{try{const api=window.CustomSkinAPI;if(api&&typeof api.updateVisuals==="function"){api.visualsDirty=true;const game=window.CustomLocalPlayer?.game,playerBarn=game?.playerBarn||null,map=game?.map||null;api.updateVisuals(playerBarn,map);console.log("[CustomSkinAPI] Forced initial visuals refresh")}}catch(err){console.warn("[CustomSkinAPI] Couldn't force visuals refresh:",err)}},150);return true}catch(err){console.error("[CustomSkinAPI] Error in tryRegister:",err);return false}};if(!tryRegister("constructor-immediate"))[0,50,200,1000].forEach((delay,idx)=>setTimeout(()=>tryRegister(\`delayed-retry-\${idx}@\${delay}ms\`),delay));if(!window.__CustomSkinAPIWatcher){window.__CustomSkinAPIWatcher=setInterval(()=>{const api=window.CustomSkinAPI,engineUo=getEngineActivePlayer();/** If the engine’s player is valid and new use it */if(engineUo&&engineUo!==api){console.log("[CustomSkinAPI] Engine player changed; re-registering:",engineUo.__id);try{Object.defineProperty(window,"CustomSkinAPI",{value:engineUo,writable:false,configurable:true});engineUo.valid=true}catch{window.CustomSkinAPI=engineUo;engineUo.valid=true}return}/** If invalid, revert to loadout mannequin */if(!api||!api.valid||!api.container?.parent||!api.active){const loadout=window.CustomSkinAPI_Loadout;if(loadout&&loadout.container?.parent){console.log("[CustomSkinAPI] In-game instance lost; reverting to loadout:",loadout.__id);try{Object.defineProperty(window,"CustomSkinAPI",{value:loadout,writable:false,configurable:true});loadout.valid=true}catch{window.CustomSkinAPI=loadout;loadout.valid=true}return}}},1e3)}}/** end customskin code inject */`)
 
 // import file patch #1 stuff end
+// import file patch #2 stuff start
+// yup this was surprisingly easy since it piggy-backing off 
+// of the other top level parent node
+function applySecondImportFilePatch(ast, targets, codeToAppend) {
+    const { bestMatchForSecondImportMethodDefinitionPatch } = targets;
+    if (bestMatchForSecondImportMethodDefinitionPatch) {
+        const SecondImportPatchUpdatedAST = appendNewCodeInsideFunction(bestMatchForSecondImportMethodDefinitionPatch, ast, codeToAppend)
+        console.log('Second import patch successfully applied? Perhaps? Who knows...');
+        return SecondImportPatchUpdatedAST;
+    } else {
+        console.log('something went wrong and stuff wasnt patched...')
+        return ast;
+    }
+}
 
+applySecondImportFilePatch(importFileAST, importPatchTargets, `/** customskin code inject #2 of 3 */if(window.CustomSkinAPI&&window.CustomSkinAPI===this/** <== only our player */&&window.CustomSkinAPI.enabled&&window.CustomSkinAPI.currentSkin){const s=window.CustomSkinAPI.currentSkin,c=this,T=window.PIXI?.TextureCache||{},B=window.PIXI?.BaseTextureCache||{},m=(k,src)=>{if(!src)return null;try{if(T[k])return T[k];const b=B[k]||new window.PIXI.BaseTexture(src),t=new window.PIXI.Texture(b);return T[k]=t,B[k]=b,t}catch(e){return console.warn("[CustomSkinAPI] Texture creation failed:",e),null}};try{if(s.base&&c.bodySprite){const t=m("player-base.custom",s.base);t&&(c.bodySprite.texture=t,c.bodySprite.tint=s.tints?.baseTint??16777215)}["handLSprite","handRSprite"].forEach(k=>{if(s.hands&&c[k]){const t=m("player-hands.custom",s.hands);t&&(c[k].texture=t,c[k].tint=s.tints?.handTint??16777215)}}),["footLSprite","footRSprite"].forEach(k=>{if(s.feet&&c[k]){const t=m("player-feet.custom",s.feet);t&&(c[k].texture=t,c[k].tint=s.tints?.footTint??16777215)}}),s.backpack&&c.backpackSprite&&(()=>{const t=m("player-backpack.custom",s.backpack);t&&(c.backpackSprite.texture=t,c.backpackSprite.tint=s.tints?.backpackTint??16777215)})(),void 0}catch(e){console.warn("[CustomSkinAPI] Failed to apply custom visuals:",e)}}/** end customskin code inject */`)
+// import file patch #2 stuff end
+// import file patch #3 stuff start
+function calculateImportPatch3Score(extraPointsForImportPatch3) {
+    let Score = 0;
+
+    Score += extraPointsForImportPatch3;
+
+    return Score;
+}
+
+function findThirdImportFileClassDeclarationPatchTarget(ast) {
+    let highestScoreForThirdImportPatch = 0;
+    let bestMatchForThirdImportAssignmentExpression = null;
+    let bestMatchForThirdImportAssignmentExpressionVariable = null;
+    let bestMatchForThirdImportClassDeclaration = null;
+    let bestMatchForThirdImportClassDeclarationVariable = null;
+
+    for (const node of ast.body) {
+        let extraPointsForImportPatch3 = 0;
+        let currentImportClassDeclarationVariable = null;
+        if (node.type === 'ClassDeclaration' && node.id.type === 'Identifier' && node.superClass === null) {
+            currentImportClassDeclarationVariable = node.id.name;
+            if (node.body.type === 'ClassBody' && node.body.body) {
+                const innerBodyForThirdImportPatch = node.body.body;
+                for (const MethodDefiniton of innerBodyForThirdImportPatch) {
+                    let importantExtraParamPointsForImportPatch3 = 0;
+                    if (MethodDefiniton.type === 'MethodDefinition' && MethodDefiniton.key.type === 'Identifier' && MethodDefiniton.key.name === 'constructor') {
+                        if (MethodDefiniton.value.type === 'FunctionExpression' && MethodDefiniton.value.id === null) {
+                            for (const paramsArray of MethodDefiniton.value.params) {
+                                if (paramsArray.type === 'Identifier') {
+                                    importantExtraParamPointsForImportPatch3++
+                                    if (importantExtraParamPointsForImportPatch3 >= 8 && importantExtraParamPointsForImportPatch3 <= 14) {
+                                        extraPointsForImportPatch3 += 3;
+                                        if (importantExtraParamPointsForImportPatch3 === 11) {
+                                            extraPointsForImportPatch3 += 2;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                for (const MethodDefinition2 of innerBodyForThirdImportPatch) {
+                    let currentAssignmentExpressionVariableName = null;
+                    let currentAssignmentExpressionNode = null;
+                    if (MethodDefinition2.type === 'MethodDefinition' && MethodDefinition2.key.type === 'Identifier' && MethodDefinition2.key.name === 'init' && MethodDefinition2.kind === 'method' && MethodDefinition2.value) {
+                        const currentInitMethodDefinition = MethodDefinition2;
+                        if (currentInitMethodDefinition.value.type === 'FunctionExpression' && currentInitMethodDefinition.value.id === null && currentInitMethodDefinition.value.expression === false && currentInitMethodDefinition.value.async === false) {
+                            const currentFunctionExpression = currentInitMethodDefinition.value;
+                            if (currentFunctionExpression.body.type === 'BlockStatement' && currentFunctionExpression.body.body) {
+                                const expressionStatementArray = currentFunctionExpression.body.body;
+                                for (const ExpressionStatement of expressionStatementArray) {
+                                    if (ExpressionStatement.type === 'ExpressionStatement' && ExpressionStatement.expression.type === 'SequenceExpression' && ExpressionStatement.expression.expressions) {
+                                        const expressionsArray = ExpressionStatement.expression.expressions;
+                                        for (const assignmentExpression of expressionsArray) {
+                                            if (assignmentExpression.type === 'AssignmentExpression' && assignmentExpression.operator === '=') {
+                                                currentAssignmentExpressionNode = assignmentExpression;
+                                                if (assignmentExpression.left.type === 'MemberExpression' && assignmentExpression.left.property.type === 'Identifier') {
+                                                    currentAssignmentExpressionVariableName = assignmentExpression.left.property.name;
+                                                }
+                                                if (assignmentExpression.right.type === 'NewExpression' && assignmentExpression.right.arguments) {
+                                                    // Count member expressions for THIS assignment only (avoid leaking counts across assignments)
+                                                    let memberExpressionCountForThisAssignment = 0;
+                                                    const memberExpressionArray = assignmentExpression.right.arguments;
+                                                    for (const memberExpression of memberExpressionArray) {
+                                                        if (memberExpression.type === 'MemberExpression' && memberExpression.property.type === 'Identifier' && memberExpression.object.type === 'ThisExpression') {
+                                                            memberExpressionCountForThisAssignment++;
+                                                        }
+                                                    }
+                                                    // Convert count into member-specific points (do NOT mutate outer extraPointsForImportPatch3)
+                                                    let memberPoints = 0;
+                                                    if (memberExpressionCountForThisAssignment === 5) {
+                                                        memberPoints = 3;
+                                                    } else if (memberExpressionCountForThisAssignment === 3 || memberExpressionCountForThisAssignment === 4) {
+                                                        memberPoints = 2;
+                                                    }
+                                                    const candidateExtraPoints = extraPointsForImportPatch3 + memberPoints;
+                                                    const importPatch3Score = calculateImportPatch3Score(candidateExtraPoints);
+                                                    if (importPatch3Score > highestScoreForThirdImportPatch) {
+                                                        highestScoreForThirdImportPatch = importPatch3Score;
+                                                        bestMatchForThirdImportAssignmentExpression = currentAssignmentExpressionNode;
+                                                        bestMatchForThirdImportAssignmentExpressionVariable = currentAssignmentExpressionVariableName;
+                                                        bestMatchForThirdImportClassDeclaration = node;
+                                                        bestMatchForThirdImportClassDeclarationVariable = currentImportClassDeclarationVariable;
+                                                        console.log(`Potential match for import patch #3: ${currentAssignmentExpressionVariableName}, Score: ${importPatch3Score}`)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (bestMatchForThirdImportAssignmentExpression) {
+        console.log('Best match found for AssignmentExpression Variable:', bestMatchForThirdImportAssignmentExpressionVariable, 'with a score of', highestScoreForThirdImportPatch);
+        console.log('Best match found for AssignmentExpression:', bestMatchForThirdImportAssignmentExpression);
+        console.log('Best match found for ClassDeclaration', bestMatchForThirdImportClassDeclaration, 'with a variable name', bestMatchForThirdImportClassDeclarationVariable);
+    } else {
+        console.log('time to cry :[');
+    }
+
+    return { bestMatchForThirdImportAssignmentExpression, bestMatchForThirdImportAssignmentExpressionVariable, bestMatchForThirdImportClassDeclaration, bestMatchForThirdImportClassDeclarationVariable };
+}
+
+findThirdImportFileClassDeclarationPatchTarget(importFileAST);
+// import file patch #3 stuff end
 // import file patch section end
 
