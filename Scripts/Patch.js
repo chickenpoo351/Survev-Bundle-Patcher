@@ -1,6 +1,8 @@
 import * as acorn from 'acorn';
 import fs from 'fs';
 import path from 'path';
+import { generate } from 'astring';
+import { transform } from 'esbuild';
 
 
 const importantFiles = fs.readdirSync('../Current-Runtime-Bundle');
@@ -61,13 +63,11 @@ if (isFile2ImportFile) {
 }
 
 if (thoughtToBeImportFileAmount >= 2 || thoughtToBeExportFileAmount >= 2) {
-    console.log('Something went wrong... apparently 2 files either ended up being assigned the import or export file so I guess we gotta call a human :o')
-    badFileNotify();
-    process.exit(1);
+    throw new Error('File detection failed: multiple files assigned as import or export. Unable to determine correct file types.');
 }
 
-function badFileNotify() {
-    console.log('eventually this will probably make a pull request notifying me the code failed but for now instead here is pointless log spam :D')
+if (!importFileAST || !exportFileAST) {
+    throw new Error('Failed to identify and assign import and export files.');
 }
 
 const exportFileName = path.basename(exportFilePath, path.extname(exportFilePath));
@@ -164,20 +164,26 @@ function findFirstExportFileVariableDeclarationPatchTarget(ast) {
 
 function appendNewCodeAfter(ast, targetNode, codeToAppend) {
     if (!targetNode) {
-        console.log('are you sure you have the right node? perhaps the code needs tweaking because it didnt match...')
-        return;
+        throw new Error('Target node is null or undefined. Patch target not found in AST.');
     }
 
     const targetEnd = targetNode.end;
-    console.log(`should be appending code at the node that ends here: ${targetEnd}`)
-    const newCodeNode = acorn.parse(codeToAppend, { ecmaVersion: 2022, allowReturnOutsideFunction: true, sourceType: 'module' });
+    console.log(`Appending code after node ending at position: ${targetEnd}`);
+
+    let newCodeNode;
+    try {
+        newCodeNode = acorn.parse(codeToAppend, { ecmaVersion: 2022, allowReturnOutsideFunction: true, sourceType: 'module' });
+    } catch (err) {
+        throw new Error(`Failed to parse code to append: ${err.message}`);
+    }
+
     const targetIndex = ast.body.findIndex(node => node === targetNode);
 
     if (targetIndex !== -1) {
         ast.body.splice(targetIndex + 1, 0, ...newCodeNode.body);
         console.log('Code appended successfully I think :o');
     } else {
-        console.log('Target node not found in the AST');
+        throw new Error('Target node not found in the AST body');
     }
 
     return ast;
@@ -185,12 +191,21 @@ function appendNewCodeAfter(ast, targetNode, codeToAppend) {
 
 function applyFirstExportFilePatch(ast, codeToAppend) {
     const { bestMatchForFirstPatch, minifiedVariableNameForPatch1 } = findFirstExportFileVariableDeclarationPatchTarget(ast);
+
+    if (!bestMatchForFirstPatch || !minifiedVariableNameForPatch1) {
+        throw new Error('First export patch target not found. Unable to locate appropriate variable declaration.');
+    }
+
     const firstPatchUpdatedAST = appendNewCodeAfter(ast, bestMatchForFirstPatch, codeToAppend);
-    console.log('First patch successfully applied? Perhaps? Who knows...');
+    console.log('First patch successfully applied');
     return firstPatchUpdatedAST;
 }
 
-applyFirstExportFilePatch(exportFileAST, `/** customskin patch #1 of 3 start */ window.PIXI = ${minifiedVariableNameForPatch1}; /** customskin patch #1 of 3 end */ `);
+const firstPatchTargets = findFirstExportFileVariableDeclarationPatchTarget(exportFileAST);
+if (!firstPatchTargets.minifiedVariableNameForPatch1) {
+    throw new Error('Unable to determine variable name for first export patch');
+}
+applyFirstExportFilePatch(exportFileAST, `/** customskin patch #1 of 3 start */ window.PIXI = ${firstPatchTargets.minifiedVariableNameForPatch1}; /** customskin patch #1 of 3 end */ `);
 
 // export patch #1 stuff end
 // export patch #2 stuff start
@@ -265,12 +280,21 @@ function findSecondExportFileVariableDeclarationPatchTarget(ast) {
 
 function applySecondExportFilePatch(ast, codeToAppend) {
     const { bestMatchForSecondPatch, minifiedVariableNameForPatch2 } = findSecondExportFileVariableDeclarationPatchTarget(ast);
+
+    if (!bestMatchForSecondPatch || !minifiedVariableNameForPatch2) {
+        throw new Error('Second export patch target not found. Unable to locate BaseTexture class.');
+    }
+
     const SecondPatchUpdatedAST = appendNewCodeAfter(ast, bestMatchForSecondPatch, codeToAppend);
-    console.log('Second patch successfully applied? Perhaps? Who knows...');
+    console.log('Second patch successfully applied');
     return SecondPatchUpdatedAST;
 }
 
-applySecondExportFilePatch(exportFileAST, `/** customskin patch #2 of 3 */ window.PIXIBaseTexture = ${minifiedVariableNameForPatch2} /** customskin patch #2 of 3 end */`);
+const secondPatchTargets = findSecondExportFileVariableDeclarationPatchTarget(exportFileAST);
+if (!secondPatchTargets.minifiedVariableNameForPatch2) {
+    throw new Error('Unable to determine variable name for second export patch');
+}
+applySecondExportFilePatch(exportFileAST, `/** customskin patch #2 of 3 */ window.PIXIBaseTexture = ${secondPatchTargets.minifiedVariableNameForPatch2} /** customskin patch #2 of 3 end */`);
 
 // export patch #2 stuff end
 // export patch #3 stuff start
@@ -343,12 +367,21 @@ function findThirdExportFileClassDeclarationPatchTarget(ast) {
 
 function applyThirdExportFilePatch(ast, codeToAppend) {
     const { bestMatchForThirdPatch, minifiedVariableNameForPatch3 } = findThirdExportFileClassDeclarationPatchTarget(ast);
+
+    if (!bestMatchForThirdPatch || !minifiedVariableNameForPatch3) {
+        throw new Error('Third export patch target not found. Unable to locate Texture class.');
+    }
+
     const ThirdPatchUpdatedAST = appendNewCodeAfter(ast, bestMatchForThirdPatch, codeToAppend);
-    console.log('Third patch successfully applied? Perhaps? Who knows...');
+    console.log('Third patch successfully applied');
     return ThirdPatchUpdatedAST;
 }
 
-applyThirdExportFilePatch(exportFileAST, `/** customskin patch #3 of 3 start */ window.PIXITexture = ${minifiedVariableNameForPatch3} /** customskin patch #3 of 3 end */`)
+const thirdPatchTargets = findThirdExportFileClassDeclarationPatchTarget(exportFileAST);
+if (!thirdPatchTargets.minifiedVariableNameForPatch3) {
+    throw new Error('Unable to determine variable name for third export patch');
+}
+applyThirdExportFilePatch(exportFileAST, `/** customskin patch #3 of 3 start */ window.PIXITexture = ${thirdPatchTargets.minifiedVariableNameForPatch3} /** customskin patch #3 of 3 end */`);
 // finally all patches for the export file done :D 
 // now just the import file and then turning both 
 // of the AST's back into a minified JavaScript file...
@@ -453,12 +486,17 @@ function findFirstAndSecondImportFileClassDeclarationPatchTarget(ast) {
 
 function appendNewCodeInsideFunction(methodDefinitionNode, ast, codeToAppend) {
     if (!methodDefinitionNode || methodDefinitionNode.type !== 'MethodDefinition' || !methodDefinitionNode.value || !methodDefinitionNode.value.body) {
-        console.log('Invalid MethodDefinition passed in');
-        return ast;
+        throw new Error('Invalid MethodDefinition: missing required properties');
     }
 
     const functionBody = methodDefinitionNode.value.body.body;
-    const parsed = acorn.parse(codeToAppend, { ecmaVersion: 2022, sourceType: 'module' });
+
+    let parsed;
+    try {
+        parsed = acorn.parse(codeToAppend, { ecmaVersion: 2022, sourceType: 'module' });
+    } catch (err) {
+        throw new Error(`Failed to parse code for method injection: ${err.message}`);
+    }
 
     functionBody.push(...parsed.body);
     console.log('Code appended inside method successfully');
@@ -469,13 +507,13 @@ const importPatchTargets = findFirstAndSecondImportFileClassDeclarationPatchTarg
 
 function applyFirstImportFilePatch(ast, targets, codeToAppend) {
     const { bestMatchForFirstImportMethodDefinitionPatch } = targets;
-    if (bestMatchForFirstImportMethodDefinitionPatch) {
-        const FirstImportPatchUpdatedAST = appendNewCodeInsideFunction(bestMatchForFirstImportMethodDefinitionPatch, ast, codeToAppend)
-        console.log('First import patch successfully applied? Perhaps? Who knows...');
-        return FirstImportPatchUpdatedAST;
-    } else {
-        return ast;
+    if (!bestMatchForFirstImportMethodDefinitionPatch) {
+        throw new Error('First import patch target not found. Unable to locate constructor method.');
     }
+
+    const FirstImportPatchUpdatedAST = appendNewCodeInsideFunction(bestMatchForFirstImportMethodDefinitionPatch, ast, codeToAppend)
+    console.log('First import patch successfully applied');
+    return FirstImportPatchUpdatedAST;
 }
 // hopefully this ; will correctly apply it to the end of the =0 
 // which is at the end of a comma chain so if that isnt added well 
@@ -488,14 +526,13 @@ applyFirstImportFilePatch(importFileAST, importPatchTargets, `;/** customskin co
 // of the other top level parent node
 function applySecondImportFilePatch(ast, targets, codeToAppend) {
     const { bestMatchForSecondImportMethodDefinitionPatch } = targets;
-    if (bestMatchForSecondImportMethodDefinitionPatch) {
-        const SecondImportPatchUpdatedAST = appendNewCodeInsideFunction(bestMatchForSecondImportMethodDefinitionPatch, ast, codeToAppend)
-        console.log('Second import patch successfully applied? Perhaps? Who knows...');
-        return SecondImportPatchUpdatedAST;
-    } else {
-        console.log('something went wrong and stuff wasnt patched...')
-        return ast;
+    if (!bestMatchForSecondImportMethodDefinitionPatch) {
+        throw new Error('Second import patch target not found. Unable to locate updateVisuals method.');
     }
+
+    const SecondImportPatchUpdatedAST = appendNewCodeInsideFunction(bestMatchForSecondImportMethodDefinitionPatch, ast, codeToAppend)
+    console.log('Second import patch successfully applied');
+    return SecondImportPatchUpdatedAST;
 }
 
 applySecondImportFilePatch(importFileAST, importPatchTargets, `/** customskin code inject #2 of 3 */if(window.CustomSkinAPI&&window.CustomSkinAPI===this/** <== only our player */&&window.CustomSkinAPI.enabled&&window.CustomSkinAPI.currentSkin){const s=window.CustomSkinAPI.currentSkin,c=this,T=window.PIXI?.TextureCache||{},B=window.PIXI?.BaseTextureCache||{},m=(k,src)=>{if(!src)return null;try{if(T[k])return T[k];const b=B[k]||new window.PIXI.BaseTexture(src),t=new window.PIXI.Texture(b);return T[k]=t,B[k]=b,t}catch(e){return console.warn("[CustomSkinAPI] Texture creation failed:",e),null}};try{if(s.base&&c.bodySprite){const t=m("player-base.custom",s.base);t&&(c.bodySprite.texture=t,c.bodySprite.tint=s.tints?.baseTint??16777215)}["handLSprite","handRSprite"].forEach(k=>{if(s.hands&&c[k]){const t=m("player-hands.custom",s.hands);t&&(c[k].texture=t,c[k].tint=s.tints?.handTint??16777215)}}),["footLSprite","footRSprite"].forEach(k=>{if(s.feet&&c[k]){const t=m("player-feet.custom",s.feet);t&&(c[k].texture=t,c[k].tint=s.tints?.footTint??16777215)}}),s.backpack&&c.backpackSprite&&(()=>{const t=m("player-backpack.custom",s.backpack);t&&(c.backpackSprite.texture=t,c.backpackSprite.tint=s.tints?.backpackTint??16777215)})(),void 0}catch(e){console.warn("[CustomSkinAPI] Failed to apply custom visuals:",e)}}/** end customskin code inject */`)
@@ -509,10 +546,11 @@ function calculateImportPatch3Score(extraPointsForImportPatch3) {
     return Score;
 }
 
+let bestMatchForThirdImportAssignmentExpressionVariable = null;
+
 function findThirdImportFileClassDeclarationPatchTarget(ast) {
     let highestScoreForThirdImportPatch = 0;
     let bestMatchForThirdImportAssignmentExpression = null;
-    let bestMatchForThirdImportAssignmentExpressionVariable = null;
     let bestMatchForThirdImportClassDeclaration = null;
     let bestMatchForThirdImportClassDeclarationVariable = null;
 
@@ -556,7 +594,7 @@ function findThirdImportFileClassDeclarationPatchTarget(ast) {
                                         for (const assignmentExpression of expressionsArray) {
                                             if (assignmentExpression.type === 'AssignmentExpression' && assignmentExpression.operator === '=') {
                                                 currentAssignmentExpressionNode = assignmentExpression;
-                                                if (assignmentExpression.left.type === 'MemberExpression' && assignmentExpression.left.property.type === 'Identifier') {
+                                                if (assignmentExpression.left.type === 'MemberExpression' && assignmentExpression.left.property.type === 'Identifier' && assignmentExpression.left.object.type === 'ThisExpression') {
                                                     currentAssignmentExpressionVariableName = assignmentExpression.left.property.name;
                                                 }
                                                 if (assignmentExpression.right.type === 'NewExpression' && assignmentExpression.right.arguments) {
@@ -609,7 +647,139 @@ function findThirdImportFileClassDeclarationPatchTarget(ast) {
     return { bestMatchForThirdImportAssignmentExpression, bestMatchForThirdImportAssignmentExpressionVariable, bestMatchForThirdImportClassDeclaration, bestMatchForThirdImportClassDeclarationVariable };
 }
 
-findThirdImportFileClassDeclarationPatchTarget(importFileAST);
+function appendNewCodeAfterAssignmentExpression(ast, targetExpression, codeToAppend) {
+    if (!targetExpression) {
+        throw new Error('Target expression is null or undefined');
+    }
+
+    let parsedExpression;
+    try {
+        const wrapped = `(${codeToAppend})`;
+        const program = acorn.parse(wrapped, { ecmaVersion: 2022 });
+        const firstNode = program.body[0];
+        if (!firstNode) throw new Error('Parsed program has no body nodes');
+
+        // The parsed node will typically be an ExpressionStatement; grab its .expression
+        if (firstNode.type === 'ExpressionStatement') {
+            parsedExpression = firstNode.expression;
+        } else {
+            parsedExpression = firstNode;
+        }
+
+        if (!parsedExpression || typeof parsedExpression.type === 'undefined') {
+            throw new Error('Parsed expression is not a valid AST node');
+        }
+    } catch (err) {
+        throw new Error(`Failed to parse expression for sequence insertion: ${err.message}`);
+    }
+
+    let inserted = false;
+
+    function traverse(node) {
+        if (!node || typeof node !== 'object') return;
+
+        if (node.type === 'SequenceExpression') {
+            const idx = node.expressions.indexOf(targetExpression);
+            if (idx !== -1) {
+                node.expressions.splice(idx + 1, 0, parsedExpression);
+                inserted = true;
+                return;
+            }
+        }
+
+        for (const key of Object.keys(node)) {
+            const child = node[key];
+            if (Array.isArray(child)) {
+                child.forEach(traverse);
+            } else {
+                traverse(child);
+            }
+        }
+    }
+
+    traverse(ast);
+
+    if (!inserted) {
+        throw new Error('SequenceExpression containing target not found in AST');
+    }
+
+    console.log('Sequence expression patched successfully');
+
+    return ast;
+}
+
+
+
+function applyThirdImportFilePatch(ast, codeToAppend) {
+    const { bestMatchForThirdImportAssignmentExpression, bestMatchForThirdImportAssignmentExpressionVariable } = findThirdImportFileClassDeclarationPatchTarget(ast);
+
+    if (!bestMatchForThirdImportAssignmentExpression || !bestMatchForThirdImportAssignmentExpressionVariable) {
+        throw new Error('Third import patch target not found. Unable to locate assignment expression in init method.');
+    }
+
+    const thirdImportPatchUpdatedAST = appendNewCodeAfterAssignmentExpression(ast, bestMatchForThirdImportAssignmentExpression, codeToAppend);
+    console.log('Third import patch successfully applied');
+    return thirdImportPatchUpdatedAST;
+}
+
+try {
+    const thirdPatchResult = findThirdImportFileClassDeclarationPatchTarget(importFileAST);
+    if (!thirdPatchResult.bestMatchForThirdImportAssignmentExpressionVariable) {
+        throw new Error('Unable to determine variable name for third patch');
+    }
+    applyThirdImportFilePatch(importFileAST, `(/** customskin patch #3 of 3 start */ window.CustomLocalPlayer = this.${thirdPatchResult.bestMatchForThirdImportAssignmentExpressionVariable} /** customskin patch #3 end */)`);
+} catch (err) {
+    throw new Error(`Third import patch failed: ${err.message}`);
+}
 // import file patch #3 stuff end
 // import file patch section end
 
+// finally its time for file recreation :D
+
+export async function emitPatchedCode(ast) {
+    // should turn the AST back into code
+    const printed = generate(ast, {
+        compact: true,
+        comments: false,
+    });
+
+    // and I think this should replicate the minification
+    // of the survev client code as seen roughly here
+    // https://github.com/survev/survev/tree/master/client/vite-plugins
+    // also thx survev peeps this couldnt have been possible without
+    // you in more ways than one :D
+    const result = await transform(printed, {
+        minify: false,
+        minifySyntax: true,
+        minifyWhitespace: true,
+        minifyIdentifiers: false,
+
+        target: "es2022",
+        format: "esm",
+        platform: "browser",
+        sourcemap: false,
+    });
+
+    return result.code;
+}
+
+async function patchAndWriteFiles() {
+    const importCode = await emitPatchedCode(importFileAST);
+    const exportCode = await emitPatchedCode(exportFileAST);
+
+    const outDir = path.resolve(import.meta.dirname, "../Current-Patched-Runtime-Bundle");
+
+    fs.mkdirSync(outDir, { recursive: true });// should hopefully handle cases if the folder is not there...
+
+    const importOutPath = path.join(outDir, `${importFileName}.patched.js`);
+    const exportOutPath = path.join(outDir, `${exportFileName}.patched.js`);
+
+    fs.writeFileSync(importOutPath, importCode, 'utf-8');
+    fs.writeFileSync(exportOutPath, exportCode, 'utf-8');
+
+    console.log("Patched files written successfully now go eat a chicken nugget :D");
+}
+
+await patchAndWriteFiles();
+
+// quite anticlimatic... 
