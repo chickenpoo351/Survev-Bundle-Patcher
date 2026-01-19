@@ -484,6 +484,69 @@ function findFirstAndSecondImportFileClassDeclarationPatchTarget(ast) {
 
 }
 
+function normalizeFunctionBody(body) {
+    for (let i = 0; i < body.length; i++) {
+        const stmt = body[i];
+
+        if (
+            stmt.type === 'ExpressionStatement' &&
+            stmt.expression.type === 'SequenceExpression'
+        ) {
+            body.splice(
+                i,
+                1,
+                ...stmt.expression.expressions.map(expr => ({
+                    type: 'ExpressionStatement',
+                    expression: expr
+                }))
+            );
+            i--; // re-check inserted nodes
+        }
+    }
+}
+
+
+function appendNewCodeInsideFunction2(methodDefinitionNode, ast, codeToAppend) {
+    if (
+        !methodDefinitionNode ||
+        methodDefinitionNode.type !== 'MethodDefinition' ||
+        !methodDefinitionNode.value ||
+        !methodDefinitionNode.value.body
+    ) {
+        throw new Error('Invalid MethodDefinition: missing required properties');
+    }
+
+    const functionBody = methodDefinitionNode.value.body.body;
+
+    const last = functionBody[functionBody.length - 1];
+    console.log('Last constructor statement BEFORE normalize:', JSON.stringify(last, null, 2));
+
+
+    normalizeFunctionBody(functionBody);
+
+    const lastAfter = functionBody[functionBody.length - 1];
+    console.log('Last constructor statement AFTER normalize:', JSON.stringify(lastAfter, null, 2));
+
+
+    let parsed;
+    try {
+        parsed = acorn.parse(
+            `function __inject__(){${codeToAppend}}`,
+            { ecmaVersion: 2022 }
+        );
+    } catch (err) {
+        throw new Error(`Failed to parse code for method injection: ${err.message}`);
+    }
+
+    const injectedStatements = parsed.body[0].body.body;
+    console.log('Injecting statements:', injectedStatements.map(n => n.type));
+
+    functionBody.push(...injectedStatements);    
+    console.log('Code appended inside method successfully');
+    return ast;
+}
+
+
 function appendNewCodeInsideFunction(methodDefinitionNode, ast, codeToAppend) {
     if (!methodDefinitionNode || methodDefinitionNode.type !== 'MethodDefinition' || !methodDefinitionNode.value || !methodDefinitionNode.value.body) {
         throw new Error('Invalid MethodDefinition: missing required properties');
@@ -511,15 +574,14 @@ function applyFirstImportFilePatch(ast, targets, codeToAppend) {
         throw new Error('First import patch target not found. Unable to locate constructor method.');
     }
 
-    const FirstImportPatchUpdatedAST = appendNewCodeInsideFunction(bestMatchForFirstImportMethodDefinitionPatch, ast, codeToAppend)
+    const FirstImportPatchUpdatedAST = appendNewCodeInsideFunction2(bestMatchForFirstImportMethodDefinitionPatch, ast, codeToAppend)
     console.log('First import patch successfully applied');
     return FirstImportPatchUpdatedAST;
 }
 // hopefully this ; will correctly apply it to the end of the =0 
 // which is at the end of a comma chain so if that isnt added well 
 // I have to do quite a bit more work :o
-applyFirstImportFilePatch(importFileAST, importPatchTargets, `;/** customskin code inject #1 of 3 */if(this.isLoadoutAvatar){/** Register loadout instance */try{if(!window.CustomSkinAPI_Loadout||!window.CustomSkinAPI_Loadout.container?.parent){window.CustomSkinAPI_Loadout=this;this.valid=true;console.log("[CustomSkinAPI] Registered loadout preview uo:",this.__id)}else console.log("[CustomSkinAPI] Another loadout instance already registered, skipping:",this.__id);/** If no active in-game instance exists, or it's invalid, prefer this loadout */const api=window.CustomSkinAPI;if(!api||!api.valid||!api.container?.parent||!api.active||api.isLoadoutAvatar){Object.defineProperty(window,"CustomSkinAPI",{value:this,writable:false,configurable:true});this.valid=true;console.log("[CustomSkinAPI] Using loadout mannequin as active API:",this.__id)}}catch(err){console.warn("[CustomSkinAPI] Could not register loadout avatar:",err)}}else{/** Safer engine player getter */const getEngineActivePlayer=()=>{try{const pa=window.CustomLocalPlayer,uo=pa?.activePlayer;if(uo&&uo.constructor?.name==="uo"){const valid=uo.active&&uo.container?.parent&&!uo.isLoadoutAvatar;if(valid)return uo}}catch{}return null};/** Mark old API invalid */if(window.CustomSkinAPI&&(!window.CustomSkinAPI.container?.parent||!window.CustomSkinAPI.active||window.CustomSkinAPI.isLoadoutAvatar)){console.log("[CustomSkinAPI] Old reference no longer valid — marking invalid");try{window.CustomSkinAPI.valid=false}catch{}}/** Register safely with smarter fallback */const tryRegister=src=>{try{const engineUo=getEngineActivePlayer();if(engineUo&&engineUo!==this){console.log("[CustomSkinAPI] Engine activePlayer verified; prioritizing engine version (source:",src,")");Object.defineProperty(window,"CustomSkinAPI",{value:engineUo,writable:false,configurable:true});engineUo.valid=true;return true}/** No valid engine player — fallback to this or the loadout one */if(!engineUo&&window.CustomSkinAPI_Loadout&&window.CustomSkinAPI_Loadout.container?.parent){console.log("[CustomSkinAPI] No engine player — reverting to loadout instance:",window.CustomSkinAPI_Loadout.__id);Object.defineProperty(window,"CustomSkinAPI",{value:window.CustomSkinAPI_Loadout,writable:false,configurable:true});window.CustomSkinAPI_Loadout.valid=true;return true}/** Otherwise, register normally */if(typeof this.__id!=="number"||this.__id<=0){console.log("[CustomSkinAPI] Invalid id; delaying registration (id:",this.__id,")");return false}Object.defineProperty(window,"CustomSkinAPI",{value:this,writable:false,configurable:true});this.valid=true;console.log("[CustomSkinAPI] Registered in-game local player uo:",this.__id,"(source:",src,")");/** Force initial visuals refresh so skin applies instantly */setTimeout(()=>{try{const api=window.CustomSkinAPI;if(api&&typeof api.updateVisuals==="function"){api.visualsDirty=true;const game=window.CustomLocalPlayer?.game,playerBarn=game?.playerBarn||null,map=game?.map||null;api.updateVisuals(playerBarn,map);console.log("[CustomSkinAPI] Forced initial visuals refresh")}}catch(err){console.warn("[CustomSkinAPI] Couldn't force visuals refresh:",err)}},150);return true}catch(err){console.error("[CustomSkinAPI] Error in tryRegister:",err);return false}};if(!tryRegister("constructor-immediate"))[0,50,200,1000].forEach((delay,idx)=>setTimeout(()=>tryRegister(\`delayed-retry-\${idx}@\${delay}ms\`),delay));if(!window.__CustomSkinAPIWatcher){window.__CustomSkinAPIWatcher=setInterval(()=>{const api=window.CustomSkinAPI,engineUo=getEngineActivePlayer();/** If the engine’s player is valid and new use it */if(engineUo&&engineUo!==api){console.log("[CustomSkinAPI] Engine player changed; re-registering:",engineUo.__id);try{Object.defineProperty(window,"CustomSkinAPI",{value:engineUo,writable:false,configurable:true});engineUo.valid=true}catch{window.CustomSkinAPI=engineUo;engineUo.valid=true}return}/** If invalid, revert to loadout mannequin */if(!api||!api.valid||!api.container?.parent||!api.active){const loadout=window.CustomSkinAPI_Loadout;if(loadout&&loadout.container?.parent){console.log("[CustomSkinAPI] In-game instance lost; reverting to loadout:",loadout.__id);try{Object.defineProperty(window,"CustomSkinAPI",{value:loadout,writable:false,configurable:true});loadout.valid=true}catch{window.CustomSkinAPI=loadout;loadout.valid=true}return}}},1e3)}}/** end customskin code inject */`)
-
+applyFirstImportFilePatch(importFileAST, importPatchTargets, `if(this.isLoadoutAvatar){try{if(!window.CustomSkinAPI_Loadout||!window.CustomSkinAPI_Loadout.container?.parent){window.CustomSkinAPI_Loadout=this,this.valid=!0,console.log("[CustomSkinAPI] Registered loadout preview uo:",this.__id)}else console.log("[CustomSkinAPI] Another loadout instance already registered, skipping:",this.__id);const e=window.CustomSkinAPI;(!e||!e.valid||!e.container?.parent||!e.active||e.isLoadoutAvatar)&&(Object.defineProperty(window,"CustomSkinAPI",{value:this,writable:!1,configurable:!0}),this.valid=!0,console.log("[CustomSkinAPI] Using loadout mannequin as active API:",this.__id))}catch(e){console.warn("[CustomSkinAPI] Could not register loadout avatar:",e)}}else{const e=()=>{try{const e=window.CustomLocalPlayer?.activePlayer;if(e&&e.active&&e.container?.parent&&!e.isLoadoutAvatar)return e}catch{}return null};window.CustomSkinAPI&&(!window.CustomSkinAPI.container?.parent||!window.CustomSkinAPI.active||window.CustomSkinAPI.isLoadoutAvatar)&&(console.log("[CustomSkinAPI] Old reference no longer valid — marking invalid"),(()=>{try{window.CustomSkinAPI.valid=!1}catch{}})());const t=t=>{try{const n=e();if(n&&n!==this)return console.log("[CustomSkinAPI] Engine activePlayer verified; prioritizing engine version (source:",t,")"),Object.defineProperty(window,"CustomSkinAPI",{value:n,writable:!1,configurable:!0}),n.valid=!0,!0;if(!n&&window.CustomSkinAPI_Loadout&&window.CustomSkinAPI_Loadout.container?.parent)return console.log("[CustomSkinAPI] No engine player — reverting to loadout instance:",window.CustomSkinAPI_Loadout.__id),Object.defineProperty(window,"CustomSkinAPI",{value:window.CustomSkinAPI_Loadout,writable:!1,configurable:!0}),window.CustomSkinAPI_Loadout.valid=!0,!0;if("number"!=typeof this.__id||this.__id<=0)return console.log("[CustomSkinAPI] Invalid id; delaying registration (id:",this.__id,")"),!1;Object.defineProperty(window,"CustomSkinAPI",{value:this,writable:!1,configurable:!0}),this.valid=!0,console.log("[CustomSkinAPI] Registered in-game local player uo:",this.__id,"(source:",t,")"),setTimeout(()=>{try{const e=window.CustomSkinAPI;if(e&&"function"==typeof e.updateVisuals){e.visualsDirty=!0;const t=window.CustomLocalPlayer?.game,n=t?.playerBarn||null,o=t?.map||null;e.updateVisuals(n,o),console.log("[CustomSkinAPI] Forced initial visuals refresh")}}catch(e){console.warn("[CustomSkinAPI] Couldn't force visuals refresh:",e)}},150),!0}catch(e){return console.error("[CustomSkinAPI] Error in tryRegister:",e),!1}};t("constructor-immediate")||[0,50,200,1e3].forEach((e,n)=>setTimeout(()=>t(\`delayed-retry-\${n}@\${e}ms\`),e)),window.__CustomSkinAPIWatcher||(window.__CustomSkinAPIWatcher=setInterval(()=>{const t=window.CustomSkinAPI,n=e();if(n&&n!==t)return console.log("[CustomSkinAPI] Engine player changed; re-registering:",n.__id),(()=>{try{Object.defineProperty(window,"CustomSkinAPI",{value:n,writable:!1,configurable:!0}),n.valid=!0}catch{window.CustomSkinAPI=n,n.valid=!0}})(),void 0;if(!t||!t.valid||!t.container?.parent||!t.active){const e=window.CustomSkinAPI_Loadout;if(e&&e.container?.parent)return console.log("[CustomSkinAPI] In-game instance lost; reverting to loadout:",e.__id),(()=>{try{Object.defineProperty(window,"CustomSkinAPI",{value:e,writable:!1,configurable:!0}),e.valid=!0}catch{window.CustomSkinAPI=e,e.valid=!0}})(),void 0}},1e3))}`)
 // import file patch #1 stuff end
 // import file patch #2 stuff start
 // yup this was surprisingly easy since it piggy-backing off 
@@ -750,7 +812,7 @@ export async function emitPatchedCode(ast) {
     // you in more ways than one :D
     const result = await transform(printed, {
         minify: false,
-        minifySyntax: true,
+        minifySyntax: false,
         minifyWhitespace: true,
         minifyIdentifiers: false,
 
